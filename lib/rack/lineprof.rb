@@ -32,23 +32,46 @@ module Rack
         raw_profile = lineprof(%r{#{matcher}}) { response = @app.call env }
       end
 
+      response_time = response_time * 100.to_f
+
+      request_id = SecureRandom.uuid
+
       unless raw_profile.empty?
         profile = format_profile(raw_profile)
         output_profile(profile)
-        write_log(response_time, profile)
+        write_request_log(request_id, response_time, request, profile)
+        write_log(request_id, response_time, profile)
       end
 
       response
     end
 
-    def write_log(response_time, profile)
+    def write_request_log(request_id, response_time, request, profile)
+      return unless options[:request_log_path]
+      ::File.open(options[:request_log_path], 'a') do |f|
+        f.write(
+          LTSV.dump(
+            request_id: request_id,
+            response_time: response_time,
+            method: request.request_method,
+            uri: request.fullpath,
+            request_body: request.body.read,
+            source: profile.map(&:format).compact.join,
+            time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
+          ) + "\n"
+        )
+      end
+    end
+
+    def write_log(request_id, response_time, profile)
       return unless options[:log_path]
       profile.map do |source|
         source.samples.select{|v| v.calls != 0 }.each do |sample|
           ::File.open(options[:log_path], 'a') do |f|
             f.write(
               LTSV.dump(
-                response_time: response_time * 100.to_f,
+                request_id: request_id,
+                response_time: response_time,
                 file: source.file_name,
                 ms: sample.ms,
                 calls: sample.calls,
@@ -65,7 +88,7 @@ module Rack
 
     def output_profile(profile)
       puts Term::ANSIColor.blue("\n[Rack::Lineprof] #{'=' * 63}") + "\n\n" +
-           profile.map(&:format).compact.join + "\n\n"
+        profile.map(&:format).compact.join + "\n\n"
     end
 
     def format_profile(raw_profile)
