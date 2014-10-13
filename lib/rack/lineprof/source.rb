@@ -16,11 +16,15 @@ module Rack
         prev_line = samples.first.line - 1
         samples.each do |sample|
           if sample.line != prev_line + 1
-            formatted << color.intense_black(' ' * 14 + '.' * 7) + "\n"
+            if colorize
+              formatted << color.intense_black(' ' * 14 + '.' * 7) + "\n"
+            else
+              formatted <<  ' ' * 14 + '.' * 7 + "\n"
+            end
           end
           prev_line = sample.line
 
-          formatted << sample.format
+          formatted << sample.format(colorize)
         end
 
         formatted
