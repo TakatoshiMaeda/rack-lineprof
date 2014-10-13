@@ -1,7 +1,7 @@
 require 'rblineprof'
 require 'term/ansicolor'
 require 'ltsv'
-require 'pry'
+require 'benchmark'
 
 module Rack
   class Lineprof
@@ -27,32 +27,38 @@ module Rack
       return @app.call env unless matcher
 
       response = nil
-      raw_profile = lineprof(%r{#{matcher}}) { response = @app.call env }
+      raw_profile = nil
+      response_time = Benchmark.realtime do
+        raw_profile = lineprof(%r{#{matcher}}) { response = @app.call env }
+      end
 
       unless raw_profile.empty?
         profile = format_profile(raw_profile)
         output_profile(profile)
-        write_log(profile)
+        write_log(response_time, profile)
       end
 
       response
     end
 
-    def write_log(profile)
+    def write_log(response_time, profile)
       return unless options[:log_path]
       profile.map do |source|
         source.samples.select{|v| v.calls != 0 }.each do |sample|
-          ::File.write(
-            options[:log_path],
-            LTSV.dump(
-              file: source.file_name,
-              ms: sample.ms,
-              calls: sample.calls,
-              line: sample.line,
-              code: sample.code,
-              level: sample.level
-            ) + "\n"
-          )
+          ::File.open(options[:log_path], 'a') do |f|
+            f.write(
+              LTSV.dump(
+                response_time: response_time * 100.to_f,
+                file: source.file_name,
+                ms: sample.ms,
+                calls: sample.calls,
+                line: sample.line,
+                code: sample.code,
+                level: sample.level,
+                time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
+              ) + "\n"
+            )
+          end
         end
       end
     end
