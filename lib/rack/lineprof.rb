@@ -32,7 +32,7 @@ module Rack
         raw_profile = lineprof(%r{#{matcher}}) { response = @app.call env }
       end
 
-      response_time = response_time * 100.to_f
+      response_time = response_time * 1000.to_f
 
       request_id = SecureRandom.uuid
 
