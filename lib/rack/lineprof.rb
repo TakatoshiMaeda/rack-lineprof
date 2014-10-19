@@ -2,6 +2,7 @@ require 'rblineprof'
 require 'term/ansicolor'
 require 'ltsv'
 require 'benchmark'
+require 'fluent-logger'
 
 module Rack
   class Lineprof
