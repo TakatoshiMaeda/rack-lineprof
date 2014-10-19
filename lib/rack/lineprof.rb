@@ -50,7 +50,7 @@ module Rack
     end
 
     def write_request_log(request_id, response_time, request, profile)
-      unless options[:request_log]
+      unless options[:request_log].nil?
         LOGGER.post(
           'ruby_request_profile_logs',
           request_id: request_id,
@@ -62,7 +62,7 @@ module Rack
           time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
         )
       end
-      unless options[:request_log_path]
+      unless options[:request_log_path].nil?
         ::File.open(options[:request_log_path], 'a') do |f|
           f.write(
             LTSV.dump(
@@ -80,7 +80,7 @@ module Rack
     end
 
     def write_log(request_id, response_time, profile)
-      unless options[:line_log]
+      unless options[:line_log].nil?
         profile.map do |source|
           source.samples.select{|v| v.calls != 0 }.each do |sample|
             LOGGER.post(
@@ -98,7 +98,7 @@ module Rack
           end
         end
       end
-      unless options[:log_path]
+      unless options[:log_path].nil?
         profile.map do |source|
           source.samples.select{|v| v.calls != 0 }.each do |sample|
             ::File.open(options[:log_path], 'a') do |f|
