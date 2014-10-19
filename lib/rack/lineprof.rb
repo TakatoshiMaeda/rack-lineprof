@@ -14,6 +14,8 @@ module Rack
     WARNING  = 2
     CRITICAL = 3
 
+    LOGGER = Fluent::Logger::FluentLogger.new(nil, host: 'localhost', port: 24234)
+
     attr_reader :app, :options
 
     def initialize(app, options = {})
@@ -38,7 +40,7 @@ module Rack
 
       unless raw_profile.empty?
         profile = format_profile(raw_profile)
-        output_profile(profile)
+        # output_profile(profile)
         write_request_log(request_id, response_time, request, profile)
         write_log(request_id, response_time, profile)
       end
@@ -47,40 +49,72 @@ module Rack
     end
 
     def write_request_log(request_id, response_time, request, profile)
-      return unless options[:request_log_path]
-      ::File.open(options[:request_log_path], 'a') do |f|
-        f.write(
-          LTSV.dump(
-            request_id: request_id,
-            response_time: response_time,
-            method: request.request_method,
-            uri: request.fullpath,
-            request_body: request.body.read,
-            source: profile.map{|v| v.format(false) }.compact.join,
-            time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
-          ) + "\n"
+      unless options[:request_log]
+        LOGGER.post(
+          'ruby_request_profile_logs',
+          request_id: request_id,
+          response_time: response_time,
+          method: request.request_method,
+          uri: request.fullpath,
+          request_body: request.body.read,
+          source: profile.map{|v| v.format(false) }.compact.join,
+          time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
         )
+      end
+      unless options[:request_log_path]
+        ::File.open(options[:request_log_path], 'a') do |f|
+          f.write(
+            LTSV.dump(
+              request_id: request_id,
+              response_time: response_time,
+              method: request.request_method,
+              uri: request.fullpath,
+              request_body: request.body.read,
+              source: profile.map{|v| v.format(false) }.compact.join,
+              time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
+            ) + "\n"
+          )
+        end
       end
     end
 
     def write_log(request_id, response_time, profile)
-      return unless options[:log_path]
-      profile.map do |source|
-        source.samples.select{|v| v.calls != 0 }.each do |sample|
-          ::File.open(options[:log_path], 'a') do |f|
-            f.write(
-              LTSV.dump(
-                request_id: request_id,
-                response_time: response_time,
-                file: source.file_name,
-                ms: sample.ms,
-                calls: sample.calls,
-                line: sample.line,
-                code: sample.code,
-                level: sample.level,
-                time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
-              ) + "\n"
+      unless options[:line_log]
+        profile.map do |source|
+          source.samples.select{|v| v.calls != 0 }.each do |sample|
+            LOGGER.post(
+              'ruby_line_profile_logs',
+              request_id: request_id,
+              response_time: response_time,
+              file: source.file_name,
+              ms: sample.ms,
+              calls: sample.calls,
+              line: sample.line,
+              code: sample.code,
+              level: sample.level,
+              time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
             )
+          end
+        end
+      end
+      unless options[:log_path]
+        profile.map do |source|
+          source.samples.select{|v| v.calls != 0 }.each do |sample|
+            ::File.open(options[:log_path], 'a') do |f|
+              f.write(
+                LTSV.dump(
+                  request_id: request_id,
+                  response_time: response_time,
+                  file: source.file_name,
+                  ms: sample.ms,
+                  calls: sample.calls,
+                  line: sample.line,
+                  code: sample.code,
+                  level: sample.level,
+                  time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
+                ) + "\n"
+              )
+            end
           end
         end
       end

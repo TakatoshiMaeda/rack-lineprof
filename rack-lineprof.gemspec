@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
   s.homepage    = 'https://github.com/kainosnoema/rack-lineprof'
 
   s.add_dependency 'ltsv'
+  s.add_dependency 'fluent-logger'
   s.add_dependency 'rack'
   s.add_dependency 'rblineprof', '~> 0.3.1'
   s.add_dependency 'term-ansicolor'
