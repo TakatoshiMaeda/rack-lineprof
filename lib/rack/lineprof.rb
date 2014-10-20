@@ -17,6 +17,9 @@ module Rack
 
     LOGGER = Fluent::Logger::FluentLogger.new(nil, host: 'localhost', port: 24234)
 
+    LINE = '%10.1fms %5i %10.1fms | % 3i  %s'
+    EMPTY_LINE = '                                | % 3i  %s'
+
     attr_reader :app, :options
 
     def initialize(app, options = {})
@@ -37,14 +40,90 @@ module Rack
 
       response_time = response_time * 1000.to_f
 
-      request_id = SecureRandom.uuid
+      pr = lineprof(/rack\/lineprof/) do
+        if raw_profile.length != 0 && (!options[:request_log].nil? || !options[:request_log_path].nil?)
+          request_id = SecureRandom.uuid
+          raw_profile.each do |file, samples|
+            next unless /#{matcher}/ =~ file
+            # Write line profile log
+            results = []
+            File.readlines(file).each.with_index(1) do |code, line|
+              wall, cpu, calls = samples[line]
 
-      unless raw_profile.empty?
-        profile = format_profile(raw_profile)
-        # output_profile(profile)
-        write_request_log(request_id, response_time, request, profile)
-        write_log(request_id, response_time, profile)
+              ms = wall / 1000.0
+              avg = ms / calls
+
+              if wall > 0
+                results << LINE % [ms, calls, avg, line, code]
+                if !options[:line_log].nil?
+                  LOGGER.post(
+                    'ruby_line_profile_logs',
+                    request_id: request_id,
+                    response_time: response_time,
+                    file: file,
+                    ms: ms,
+                    calls: calls,
+                    avg: avg,
+                    line: line,
+                    code: code,
+                    time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
+                  )
+                end
+
+                if !options[:line_log_path].nil?
+                  ::File.open(options[:line_log_path], 'a') do |f|
+                    f.write(
+                      LTSV.dump(
+                        request_id: request_id,
+                        response_time: response_time,
+                        file: file,
+                        ms: ms,
+                        calls: calls,
+                        avg: avg,
+                        line: line,
+                        code: code,
+                        time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
+                      ) + "\n"
+                    )
+                  end
+                end
+              else
+                results << EMPTY_LINE % [line, code]
+              end
+            end
+
+            if !options[:request_log].nil?
+              LOGGER.post(
+                'ruby_request_profile_logs',
+                request_id: request_id,
+                response_time: response_time,
+                method: request.request_method,
+                uri: request.fullpath,
+                request_body: request.body.read,
+                source: results.join,
+                time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
+              )
+            end
+
+            if !options[:request_log_path].nil?
+              ::File.open(options[:request_log_path], 'a') do |f|
+                f.write(
+                  LTSV.dump(
+                    request_id: request_id,
+                    response_time: response_time,
+                    method: request.request_method,
+                    uri: request.fullpath,
+                    request_body: request.body.read,
+                    source: profile.map{|v| v.format(false) }.compact.join,
+                    time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
+                  ) + "\n"
+                )
+              end
+            end
+          end
+        end
       end
+      output_profile(format_profile(pr))
 
       response
     end
