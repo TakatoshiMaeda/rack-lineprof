@@ -24,6 +24,7 @@ module Rack
 
     def initialize(app, options = {})
       @app, @options = app, options
+      @sources = {}
     end
 
     def call(env)
@@ -47,7 +48,10 @@ module Rack
             next unless /#{matcher}/ =~ file
             # Write line profile log
             results = []
-            File.readlines(file).each.with_index(1) do |code, line|
+            if @sources[file].nil?
+              @sources[file] = ::File.readlines(file)
+            end
+            @sources[file].each.with_index(1) do |code, line|
               wall, cpu, calls = samples[line]
 
               ms = wall / 1000.0
