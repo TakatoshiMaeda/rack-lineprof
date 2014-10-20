@@ -118,7 +118,7 @@ module Rack
                     method: request.request_method,
                     uri: request.fullpath,
                     request_body: request.body.read,
-                    source: profile.map{|v| v.format(false) }.compact.join,
+                    source: results.join,
                     time: Time.now.strftime('%Y-%m-%d %H:%M:%S')
                   ) + "\n"
                 )
